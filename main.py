@@ -73,14 +73,18 @@ class AnonymousChatBot:
     def start_health_server(self):
         """Iniciar servidor HTTP para health checks de Render"""
         def run_server():
-            port = int(os.getenv('PORT', 8000))
+            port = int(os.getenv('PORT', 10000))
             server = HTTPServer(('0.0.0.0', port), HealthHandler)
             logging.info(f"Health server starting on port {port}")
-            server.serve_forever()
+            try:
+                server.serve_forever()
+            except Exception as e:
+                logging.error(f"Health server error: {e}")
         
         # Ejecutar servidor en hilo separado
         health_thread = threading.Thread(target=run_server, daemon=True)
         health_thread.start()
+        logging.info("Health server thread started")
     
     def setup_handlers(self):
         """Setup all command and message handlers"""
