@@ -1,5 +1,5 @@
 """
-Telegram Anonymous Group Chat Bot - Render Version
+Telegram Anonymous Group Chat Bot - Simple Version for Render
 
 A bot that creates an anonymous group chat where users are assigned
 random unique names and can chat without revealing their identities.
@@ -13,38 +13,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from name_generator import NameGenerator  
 from user_manager import UserManager
 
-# Para Render - servidor web simple
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
-import json
-
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Handler para mantener activo en Render
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response = {
-                'status': 'active',
-                'service': 'telegram-anonymous-bot',
-                'timestamp': time.time()
-            }
-            self.wfile.write(json.dumps(response).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-    
-    def log_message(self, format, *args):
-        # Silenciar logs del servidor HTTP
-        pass
 
 class AnonymousChatBot:
     def __init__(self):
@@ -64,27 +38,8 @@ class AnonymousChatBot:
         # Create application
         self.application = Application.builder().token(self.token).build()
         
-        # Iniciar servidor HTTP para Render
-        self.start_health_server()
-        
         # Setup handlers
         self.setup_handlers()
-    
-    def start_health_server(self):
-        """Iniciar servidor HTTP para health checks de Render"""
-        def run_server():
-            port = int(os.getenv('PORT', 10000))
-            server = HTTPServer(('0.0.0.0', port), HealthHandler)
-            logging.info(f"Health server starting on port {port}")
-            try:
-                server.serve_forever()
-            except Exception as e:
-                logging.error(f"Health server error: {e}")
-        
-        # Ejecutar servidor en hilo separado
-        health_thread = threading.Thread(target=run_server, daemon=True)
-        health_thread.start()
-        logging.info("Health server thread started")
     
     def setup_handlers(self):
         """Setup all command and message handlers"""
@@ -165,7 +120,8 @@ class AnonymousChatBot:
         
         if success:
             # Release the name back to the pool (but keep permanent assignment)
-            self.name_generator.release_name(anonymous_name, user_id)
+            if anonymous_name:
+                self.name_generator.release_name(anonymous_name, user_id)
             
             await update.message.reply_text(
                 f"👋 Has salido del grupo anónimo.\n"
@@ -173,8 +129,9 @@ class AnonymousChatBot:
             )
             
             # Notify other users
-            notification = f"📢 {anonymous_name} ha salido del grupo anónimo"
-            await self.broadcast_message(notification, exclude_user_id=user_id)
+            if anonymous_name:
+                notification = f"📢 {anonymous_name} ha salido del grupo anónimo"
+                await self.broadcast_message(notification, exclude_user_id=user_id)
         else:
             await update.message.reply_text("❌ Error al salir del grupo.")
 
@@ -222,6 +179,10 @@ class AnonymousChatBot:
         # Get user's anonymous name
         anonymous_name = self.user_manager.get_user_name(user_id)
         
+        if not anonymous_name:
+            await update.message.reply_text("❌ Error al obtener tu nombre anónimo.")
+            return
+        
         # Format the message
         formatted_message = f"{anonymous_name}: {message_text}"
         
@@ -251,8 +212,6 @@ class AnonymousChatBot:
                 sent_count += 1
             except Exception as e:
                 logger.warning(f"Failed to send message to user {user_id}: {e}")
-                # Optionally remove user if they blocked the bot
-                # self.user_manager.remove_user(user_id)
         
         return sent_count
 
@@ -323,7 +282,7 @@ class AnonymousChatBot:
         if not context.args:
             await update.message.reply_text(
                 "❌ Uso: /kickuser [nombre_anónimo]\n"
-                "Ejemplo: /kickuser 🐺🌙 Lobo Misterioso"
+                "Ejemplo: /kickuser 🐺 Lobo Misterioso"
             )
             return
         
@@ -371,7 +330,7 @@ class AnonymousChatBot:
         if not context.args:
             await update.message.reply_text(
                 "❌ Uso: /resetuser [nombre_anónimo]\n"
-                "Ejemplo: /resetuser 🐺🌙 Lobo Misterioso"
+                "Ejemplo: /resetuser 🐺 Lobo Misterioso"
             )
             return
         
